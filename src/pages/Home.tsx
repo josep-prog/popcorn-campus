@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import heroImage from "@/assets/hero-popcorn.jpg";
 import { fetchSettingsMap } from "@/lib/settings";
+import PWAInstallButton from "@/components/PWAInstallButton";
 
 const Home = () => {
   const navigate = useNavigate();
@@ -37,7 +38,7 @@ const Home = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20">
       {/* Hero Section */}
       <div className="relative overflow-hidden bg-gradient-hero py-20 px-4">
         <div className="absolute inset-0">
@@ -87,6 +88,14 @@ const Home = () => {
             >
               Sign In
             </Button>
+            
+            <PWAInstallButton 
+              variant="outline"
+              size="lg"
+              className="px-8 py-6 text-lg rounded-full bg-white/20 backdrop-blur-sm border-white/30 text-white hover:bg-white/30"
+            >
+              📱 Install App
+            </PWAInstallButton>
           </div>
         </div>
       </div>

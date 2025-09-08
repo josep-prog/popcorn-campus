@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useNavigate, unstable_HistoryRouter as HistoryRouter } from "react-router-dom";
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import PWAInstallPrompt from "@/components/SimpleInstallPrompt";
+import { initializeNotifications, subscribeToNotifications, sendWelcomeNotification } from "@/lib/notifications";
 import Home from "./pages/Home";
 import Order from "./pages/Order";
 import Payment from "./pages/Payment";
@@ -24,7 +26,22 @@ const queryClient = new QueryClient();
 
 const App = () => {
   useEffect(() => {
+    console.log('App component mounted - PWA Install Prompt should be loading...');
     (async () => {
+      // Initialize PWA features
+      try {
+        const notificationsInitialized = await initializeNotifications();
+        if (notificationsInitialized) {
+          await subscribeToNotifications();
+          // Send welcome notification after a delay
+          setTimeout(() => {
+            sendWelcomeNotification();
+          }, 3000);
+        }
+      } catch (error) {
+        console.error('Failed to initialize PWA features:', error);
+      }
+
       // Handle PKCE flow (code in query)
       const hasCode = typeof window !== "undefined" && window.location.search.includes("code=");
       if (hasCode) {
@@ -80,6 +97,7 @@ const App = () => {
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
+          <PWAInstallPrompt />
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>
