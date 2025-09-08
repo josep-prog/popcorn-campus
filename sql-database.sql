@@ -21,6 +21,11 @@ create policy "Profiles: individual update"
 on public.profiles for update
 using (auth.uid() = id);
 
+-- Profiles for admins (read all)
+create policy "Profiles: admin read"
+on public.profiles for select
+using (exists (select 1 from public.admins a where a.user_id = auth.uid()));
+
 -- 2) Orders
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),

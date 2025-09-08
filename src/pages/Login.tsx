@@ -35,7 +35,15 @@ const Login = () => {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
 
-      const profileName = data.user?.user_metadata?.full_name || "User";
+      const profileName = data.user?.user_metadata?.full_name || data.user?.user_metadata?.name || data.user?.email?.split("@")[0] || "User";
+
+      // Ensure profiles table has this user with correct name
+      try {
+        await supabase
+          .from("profiles")
+          .upsert({ id: data.user!.id, full_name: profileName, phone: (data.user!.user_metadata as any)?.phone || null })
+          .eq("id", data.user!.id);
+      } catch {}
 
       toast({
         title: "Welcome back! 🎉",

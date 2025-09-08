@@ -77,6 +77,16 @@ const SignUp = () => {
       }
 
       const userEmail = data.user?.email || formData.email;
+
+      // Upsert profile immediately so Admin sees exact name
+      try {
+        if (data.user) {
+          await supabase
+            .from("profiles")
+            .upsert({ id: data.user.id, full_name: formData.fullName, phone: formData.phone })
+            .eq("id", data.user.id);
+        }
+      } catch {}
       localStorage.setItem("user", JSON.stringify({
         email: userEmail,
         name: formData.fullName,

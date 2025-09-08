@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate, unstable_HistoryRouter as HistoryRouter } from "react-router-dom";
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import Home from "./pages/Home";
@@ -39,7 +39,18 @@ const App = () => {
       // Handle implicit flow (tokens in hash)
       const hasTokenHash = typeof window !== "undefined" && window.location.hash.includes("access_token");
       if (hasTokenHash) {
-        await supabase.auth.getSession();
+        const { data } = await supabase.auth.getSession();
+        const authUser = data.session?.user;
+        if (authUser) {
+          // Ensure profiles table has up-to-date name after OAuth
+          const fallbackName = (authUser.user_metadata as any)?.full_name || (authUser.user_metadata as any)?.name || authUser.email || "User";
+          try {
+            await supabase
+              .from("profiles")
+              .upsert({ id: authUser.id, full_name: fallbackName, phone: (authUser.user_metadata as any)?.phone || null })
+              .eq("id", authUser.id);
+          } catch {}
+        }
         history.replaceState({}, "", window.location.origin + window.location.pathname);
       }
     })();
@@ -50,7 +61,7 @@ const App = () => {
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/order" element={<Order />} />

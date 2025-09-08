@@ -25,11 +25,11 @@ const AdminDashboard = () => {
         const revenue = (paymentsRes.data || []).reduce((sum: number, row: any) => sum + (row.amount || 0), 0);
         setTotalRevenue(revenue);
 
-        // Pending deliveries: orders that are confirmed but not delivered
+        // Pending deliveries: orders that are not yet delivered (pending, preparing, confirmed)
         const pendingRes = await supabase
           .from("orders")
           .select("id", { count: "exact", head: true })
-          .eq("status", "confirmed");
+          .in("status", ["pending", "preparing", "confirmed"]);
         setPendingDeliveries(pendingRes.count ?? 0);
 
         // Active clients: distinct non-null user_id that have at least one order
@@ -39,7 +39,8 @@ const AdminDashboard = () => {
           .not("user_id", "is", null);
         const unique = new Set<string>((clientsRes.data || []).map((r: any) => r.user_id));
         setActiveClients(unique.size);
-      } catch {
+      } catch (error) {
+        console.error("Dashboard data fetch error:", error);
         setTotalOrders(0);
         setTotalRevenue(0);
         setPendingDeliveries(0);
