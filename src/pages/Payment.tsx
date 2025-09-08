@@ -7,6 +7,7 @@ import { ArrowLeft, CreditCard, Phone, CheckCircle, AlertCircle } from "lucide-r
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
+import { fetchSettingsMap } from "@/lib/settings";
 
 interface OrderDetails {
   orderId?: string | number;
@@ -25,11 +26,22 @@ const Payment = () => {
   const [isVerifying, setIsVerifying] = useState(false);
   const [paymentCompleted, setPaymentCompleted] = useState(false);
 
-  // MoMo details sourced from environment variables (with safe fallbacks)
-  const momoCode = (import.meta as any).env?.VITE_MOMO_CODE ?? "*182*81*12345#";
-  const merchantName = (import.meta as any).env?.VITE_MERCHANT_NAME ?? "Campus Popcorn Ltd";
+  // MoMo details pulled from settings (fallback to env if missing)
+  const envMomo = (import.meta as any).env?.VITE_MOMO_CODE ?? "*182*81*12345#";
+  const envMerchant = (import.meta as any).env?.VITE_MERCHANT_NAME ?? "Campus Popcorn Ltd";
+  const [momoCode, setMomoCode] = useState(envMomo);
+  const [merchantName, setMerchantName] = useState(envMerchant);
 
   useEffect(() => {
+    // load dynamic settings for momo code and merchant name
+    (async () => {
+      const map = await fetchSettingsMap();
+      const code = map["momo_code"];
+      const merchant = map["merchant_name"];
+      if (code) setMomoCode(code);
+      if (merchant) setMerchantName(merchant);
+    })();
+
     const storedOrder = localStorage.getItem("currentOrder");
     if (!storedOrder) {
       toast({

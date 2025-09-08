@@ -8,6 +8,7 @@ import { Eye, EyeOff, Mail, Lock, ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
+import { getUserRole } from "@/lib/auth";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -47,7 +48,8 @@ const Login = () => {
         loginTime: Date.now(),
       }));
       
-      navigate("/dashboard");
+      const role = await getUserRole();
+      navigate(role === "admin" ? "/admin" : "/dashboard");
     } catch (error: any) {
       // eslint-disable-next-line no-console
       console.error("Login error:", error);
@@ -63,7 +65,7 @@ const Login = () => {
 
   const handleGoogleSignIn = async () => {
     try {
-      const redirectTo = window.location.origin + "/dashboard";
+      const redirectTo = window.location.origin + "/oauth-complete";
       const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo } });
       if (error) throw error;
     } catch (error: any) {

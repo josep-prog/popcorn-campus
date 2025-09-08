@@ -174,3 +174,34 @@ $$;
 
 -- Allow authenticated users to execute the RPC
 grant execute on function public.verify_payment_rpc(text, text, text) to authenticated;
+
+-- 7) Application key-value settings for admin controls
+create table if not exists public.settings (
+  key text primary key,
+  value text,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.settings enable row level security;
+
+-- Allow anyone (including anon) to read settings so the app can display status and labels
+create policy "Settings: public read"
+on public.settings for select
+using (true);
+
+-- Only admins can insert or update settings
+create policy "Settings: admin upsert"
+on public.settings for insert
+with check (exists (select 1 from public.admins a where a.user_id = auth.uid()));
+
+create policy "Settings: admin update"
+on public.settings for update
+using (exists (select 1 from public.admins a where a.user_id = auth.uid()));
+
+-- Optional: seed default rows if missing (idempotent via upsert)
+insert into public.settings as s (key, value)
+values
+  ('service_status', 'open'),
+  ('momo_code', ''),
+  ('merchant_name', '')
+on conflict (key) do update set value = excluded.value where false; -- no-op if exists

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,10 +6,23 @@ import { Clock, MapPin, Phone, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import heroImage from "@/assets/hero-popcorn.jpg";
+import { fetchSettingsMap } from "@/lib/settings";
 
 const Home = () => {
   const navigate = useNavigate();
-  const [serviceStatus] = useState<"open" | "closed">("open"); // This would come from backend
+  const [serviceStatus, setServiceStatus] = useState<"open" | "closed">("open");
+  const [momoCode, setMomoCode] = useState<string>("");
+  const [merchantName, setMerchantName] = useState<string>("");
+
+  useEffect(() => {
+    (async () => {
+      const map = await fetchSettingsMap();
+      const status = (map["service_status"] as string) || "open";
+      setServiceStatus(status === "closed" ? "closed" : "open");
+      setMomoCode(map["momo_code"] || "");
+      setMerchantName(map["merchant_name"] || "");
+    })();
+  }, []);
 
   const handleStartOrder = () => {
     if (serviceStatus === "closed") {
