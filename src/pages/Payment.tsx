@@ -113,14 +113,14 @@ const Payment = () => {
         });
       if (paymentInsertError) throw paymentInsertError;
       
-      setPaymentCompleted(true);
-      localStorage.removeItem("currentOrder");
-      
-      toast({
-        title: "Payment Verified! 🎉",
-        description: "Your order has been confirmed and will be delivered in 5 minutes.",
-      });
-      
+        setPaymentCompleted(true);
+        localStorage.removeItem("currentOrder");
+        
+        toast({
+          title: "Payment Verified! 🎉",
+          description: "Your order has been confirmed and will be delivered in 5 minutes.",
+        });
+        
     } catch (error: any) {
       console.error("Payment verification error:", error);
       toast({
