@@ -37,25 +37,33 @@ const Dashboard = () => {
 
   useEffect(() => {
     const load = async () => {
-      // Check if user is logged in
-      const storedUser = localStorage.getItem("user");
-      if (!storedUser) {
-        toast({
-          title: "Access Denied",
-          description: "Please log in to access your dashboard.",
-          variant: "destructive",
-        });
-        navigate("/login");
-        return;
-      }
-
       try {
-        const userData = JSON.parse(storedUser) as User;
-        setUser(userData);
+        // Prefer authoritative session from Supabase over localStorage
+        const { data: authGetUser } = await supabase.auth.getUser();
+        const authUser = authGetUser?.user;
+
+        if (!authUser) {
+          toast({
+            title: "Access Denied",
+            description: "Please log in to access your dashboard.",
+            variant: "destructive",
+          });
+          navigate("/login");
+          return;
+        }
+
+        const profileName = (authUser.user_metadata as any)?.full_name || authUser.email || "User";
+        const normalizedUser: User = {
+          email: authUser.email || "",
+          name: profileName,
+          loginTime: Date.now(),
+        };
+        setUser(normalizedUser);
+        // Backfill localStorage for code that reads it elsewhere
+        localStorage.setItem("user", JSON.stringify(normalizedUser));
 
         // Load order history from Supabase
-        const { data: authUser } = await supabase.auth.getUser();
-        const userId = authUser.user?.id;
+        const userId = authUser.id;
         const { data: orders, error } = await supabase
           .from("orders")
           .select("id, portions, location, total_price, status, created_at, payments:payments(txid)")
