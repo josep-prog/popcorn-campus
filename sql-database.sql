@@ -53,6 +53,22 @@ create policy "Orders: update own"
 on public.orders for update
 using (auth.uid() = user_id);
 
+-- Optional: allow anonymous orders (no login) by permitting rows with NULL user_id
+-- Insert: allow anonymous when user_id is NULL
+create policy "Orders: insert anon"
+on public.orders for insert
+with check (auth.uid() is null and user_id is null);
+
+-- Select: allow anonymous users to read their anonymous orders (user_id NULL)
+create policy "Orders: select anon"
+on public.orders for select
+using (auth.uid() is null and user_id is null);
+
+-- Update: allow anonymous to update their anonymous orders
+create policy "Orders: update anon"
+on public.orders for update
+using (auth.uid() is null and user_id is null);
+
 -- 3) Messages (forwarded MoMo SMS)
 create table if not exists public.messages (
   id uuid primary key default gen_random_uuid(),
