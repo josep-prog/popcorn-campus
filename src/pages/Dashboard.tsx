@@ -23,11 +23,8 @@ interface OrderHistory {
   totalPrice: number;
   status: string;
   orderTime: string;
-  paymentDetails?: {
-    transactionId: string;
-    accountName: string;
-    phoneNumber: string;
-  };
+  paymentStatus?: string;
+  paymentProofUrl?: string | null;
 }
 
 const Dashboard = () => {
@@ -66,7 +63,7 @@ const Dashboard = () => {
         const userId = authUser.id;
         const { data: orders, error } = await supabase
           .from("orders")
-          .select("id, portions, location, total_price, status, created_at, payments:payments(txid)")
+          .select("id, portions, location, total_price, status, payment_status, payment_proof_url, created_at")
           .eq("user_id", userId)
           .order("created_at", { ascending: false });
         if (error) throw error;
@@ -78,13 +75,8 @@ const Dashboard = () => {
           totalPrice: o.total_price,
           status: o.status || "pending",
           orderTime: o.created_at,
-          paymentDetails: o.payments?.[0]?.txid
-            ? {
-                transactionId: o.payments[0].txid,
-                accountName: "",
-                phoneNumber: "",
-              }
-            : undefined,
+          paymentStatus: o.payment_status,
+          paymentProofUrl: o.payment_proof_url,
         }));
 
         setOrderHistory(mapped);
@@ -288,11 +280,18 @@ const Dashboard = () => {
                             </div>
                           </div>
 
-                          {order.paymentDetails && (
-                            <div className="mt-3 pt-3 border-t text-xs text-muted-foreground">
-                              <span>Payment: {order.paymentDetails.transactionId}</span>
-                            </div>
-                          )}
+                          <div className="mt-3 pt-3 border-t text-xs text-muted-foreground">
+                            <span>
+                              Payment Status: {order.paymentStatus ? order.paymentStatus : 'pending'}
+                            </span>
+                            {order.paymentProofUrl && (
+                              <>
+                                {' '}• <a href={order.paymentProofUrl} target="_blank" rel="noreferrer" className="underline">
+                                  View Payment Proof
+                                </a>
+                              </>
+                            )}
+                          </div>
                         </div>
                       );
                     })}

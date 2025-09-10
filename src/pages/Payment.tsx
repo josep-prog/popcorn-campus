@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ArrowLeft, CreditCard, Phone, CheckCircle, AlertCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle, AlertCircle, Phone } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { fetchSettingsMap } from "@/lib/settings";
+import { uploadPaymentProof } from "@/lib/storage";
+import PaymentProofUpload from "@/components/PaymentProofUpload";
 
 interface OrderDetails {
   orderId?: string | number;
@@ -20,10 +20,9 @@ interface OrderDetails {
 const Payment = () => {
   const navigate = useNavigate();
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
-  const [transactionId, setTransactionId] = useState("");
-  const [accountName, setAccountName] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [isVerifying, setIsVerifying] = useState(false);
+  const [customerName, setCustomerName] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [paymentCompleted, setPaymentCompleted] = useState(false);
 
   // MoMo details pulled from settings (fallback to env if missing)
@@ -62,86 +61,78 @@ const Payment = () => {
     }
   }, [navigate]);
 
-  const handlePaymentVerification = async () => {
-    if (!transactionId.trim() || !accountName.trim() || !phoneNumber.trim()) {
+  const handleCompleteOrder = async () => {
+    if (!customerName.trim()) {
       toast({
         title: "Missing Information",
-        description: "Please fill in all payment verification details.",
+        description: "Please enter your name to complete the order.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!selectedFile) {
+      toast({
+        title: "Missing Payment Proof",
+        description: "Please upload your payment proof to complete the order.",
         variant: "destructive",
       });
       return;
     }
 
     if (!orderDetails?.orderId) {
-      toast({ title: "Order Missing", description: "Could not find order reference. Please restart your order.", variant: "destructive" });
+      toast({ 
+        title: "Order Missing", 
+        description: "Could not find order reference. Please restart your order.", 
+        variant: "destructive" 
+      });
       return;
     }
 
-    setIsVerifying(true);
+    setIsUploading(true);
     
     try {
-      // Verify against Supabase messages table
-      const last4 = phoneNumber.slice(-4);
-      const { data: messages, error: messagesError } = await supabase
-        .from("messages")
-        .select("id, txid, payer_name, phone_number, amount, received_at")
-        .eq("txid", transactionId.trim())
-        .ilike("payer_name", `%${accountName.trim()}%`)
-        .ilike("phone_number", `%${last4}`)
-        .limit(1);
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      // Upload payment proof file
+      const { url: paymentProofUrl } = await uploadPaymentProof(
+        selectedFile,
+        orderDetails.orderId.toString(),
+        user?.id
+      );
 
-      if (messagesError) {
-        throw messagesError;
-      }
-
-      const matched = messages && messages.length > 0 ? messages[0] : null;
-
-      if (!matched) {
-        toast({
-          title: "Payment Verification Failed",
-          description: "No matching payment SMS found. Check your details and try again.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Update order status and record payment
+      // Update order with payment proof and customer name
       const { error: orderUpdateError } = await supabase
         .from("orders")
-        .update({ payment_status: "confirmed", status: "confirmed" })
+        .update({ 
+          payment_proof_url: paymentProofUrl,
+          customer_name: customerName.trim(),
+          payment_proof_uploaded_at: new Date().toISOString(),
+          payment_status: "pending", // Set to pending for admin review
+          status: "pending" 
+        })
         .eq("id", orderDetails.orderId);
-      if (orderUpdateError) throw orderUpdateError;
-
-      const { error: paymentInsertError } = await supabase
-        .from("payments")
-        .insert({
-          order_id: orderDetails.orderId,
-          txid: transactionId.trim(),
-          account_name: accountName.trim(),
-          phone_number: phoneNumber.trim(),
-          amount: orderDetails.totalPrice,
-          verified_at: new Date().toISOString(),
-          message_id: matched.id,
-        });
-      if (paymentInsertError) throw paymentInsertError;
-      
-        setPaymentCompleted(true);
-        localStorage.removeItem("currentOrder");
         
-        toast({
-          title: "Payment Verified! 🎉",
-          description: "Your order has been confirmed and will be delivered in 5 minutes.",
-        });
+      if (orderUpdateError) throw orderUpdateError;
+      
+      setPaymentCompleted(true);
+      localStorage.removeItem("currentOrder");
+      
+      toast({
+        title: "Order Submitted! 📄",
+        description: "Your payment proof has been uploaded. We'll review and confirm your order shortly.",
+      });
         
     } catch (error: any) {
-      console.error("Payment verification error:", error);
+      console.error("Order completion error:", error);
       toast({
-        title: "Verification Error",
-        description: error?.message || "An error occurred while verifying your payment. Please try again.",
+        title: "Upload Error",
+        description: error?.message || "An error occurred while uploading your payment proof. Please try again.",
         variant: "destructive",
       });
     } finally {
-      setIsVerifying(false);
+      setIsUploading(false);
     }
   };
 
@@ -166,8 +157,8 @@ const Payment = () => {
         <Card className="campus-card max-w-lg w-full animate-fade-in">
           <CardHeader className="text-center">
             <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-            <CardTitle className="text-2xl text-green-600">Payment Confirmed!</CardTitle>
-            <CardDescription>Your popcorn order is being prepared</CardDescription>
+            <CardTitle className="text-2xl text-green-600">Order Submitted!</CardTitle>
+            <CardDescription>Your payment proof has been uploaded for review</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="bg-muted/50 rounded-lg p-4">
@@ -176,16 +167,16 @@ const Payment = () => {
                 <p><span className="text-muted-foreground">Portions:</span> {orderDetails.portions}</p>
                 <p><span className="text-muted-foreground">Location:</span> {orderDetails.location}</p>
                 <p><span className="text-muted-foreground">Total:</span> {orderDetails.totalPrice.toLocaleString()} RWF</p>
-                <p><span className="text-muted-foreground">Estimated Delivery:</span> 5 minutes</p>
+                <p><span className="text-muted-foreground">Status:</span> Pending Review</p>
               </div>
             </div>
             
             <div className="bg-accent-light rounded-lg p-4">
               <p className="text-sm font-medium text-accent-foreground mb-2">
-                📧 Confirmation email sent!
+                📋 Payment proof uploaded!
               </p>
               <p className="text-xs text-muted-foreground">
-                You'll receive order updates via email and SMS.
+                Our team will review your payment and confirm your order shortly.
               </p>
             </div>
             
@@ -231,9 +222,9 @@ const Payment = () => {
             Back to Order
           </Button>
           
-          <h1 className="text-3xl font-bold mb-2">Complete Payment</h1>
+          <h1 className="text-3xl font-bold mb-2">Complete Your Order</h1>
           <p className="text-muted-foreground">
-            Pay securely with MTN Mobile Money
+            Upload your payment proof to complete your order
           </p>
         </div>
 
@@ -300,66 +291,34 @@ const Payment = () => {
             </CardContent>
           </Card>
 
-          {/* Payment Verification */}
+          {/* Payment Proof Upload */}
+          <PaymentProofUpload
+            onFileSelect={setSelectedFile}
+            customerName={customerName}
+            onCustomerNameChange={setCustomerName}
+            isUploading={isUploading}
+            selectedFile={selectedFile}
+            disabled={isUploading}
+          />
+
+          {/* Complete Order Button */}
           <Card className="campus-card animate-slide-up">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="h-5 w-5" />
-                Verify Your Payment
-              </CardTitle>
-              <CardDescription>
-                Enter the details from your SMS confirmation
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="transactionId">Transaction ID (TxId)</Label>
-                <Input
-                  id="transactionId"
-                  placeholder="e.g., MP240108.1234.A12345"
-                  value={transactionId}
-                  onChange={(e) => setTransactionId(e.target.value)}
-                  className="campus-input"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Found in your SMS confirmation from MTN
-                </p>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="accountName">Account Holder Name</Label>
-                <Input
-                  id="accountName"
-                  placeholder="Your name as shown in SMS"
-                  value={accountName}
-                  onChange={(e) => setAccountName(e.target.value)}
-                  className="campus-input"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="phoneNumber">Phone Number</Label>
-                <Input
-                  id="phoneNumber"
-                  placeholder="250xxxxxxxxx"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  className="campus-input"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Phone number used for the transaction
-                </p>
-              </div>
-              
+            <CardContent className="pt-6">
               <Button
-                onClick={handlePaymentVerification}
-                disabled={isVerifying}
+                onClick={handleCompleteOrder}
+                disabled={isUploading || !selectedFile || !customerName.trim()}
                 variant="campus"
                 className="w-full text-lg py-6"
                 size="lg"
               >
-                {isVerifying ? "Verifying Payment..." : "Verify Payment"}
+                {isUploading ? "Uploading Payment Proof..." : "Complete Order"}
               </Button>
+              
+              {(!selectedFile || !customerName.trim()) && (
+                <p className="text-sm text-muted-foreground text-center mt-3">
+                  Please fill in all required fields to complete your order
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>

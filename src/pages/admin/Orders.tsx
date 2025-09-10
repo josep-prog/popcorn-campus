@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "@/hooks/use-toast";
 import ClientDetailsDialog from "@/components/ClientDetailsDialog";
+import PaymentProofViewer from "@/components/PaymentProofViewer";
 
 interface OrderRow {
   id: string;
@@ -11,7 +15,11 @@ interface OrderRow {
   location: string;
   total_price: number;
   status: string;
+  payment_status: string;
   created_at: string;
+  customer_name?: string | null;
+  payment_proof_url?: string | null;
+  payment_proof_uploaded_at?: string | null;
   payments: Array<{ txid: string }>;
   profile?: {
     full_name: string | null;
@@ -30,7 +38,7 @@ const AdminOrders = () => {
       const { data: orders, error: ordersError } = await supabase
         .from("orders")
         .select(
-          `id,user_id,email,portions,location,total_price,status,created_at,payments:payments(txid)`
+          `id,user_id,email,portions,location,total_price,status,payment_status,created_at,customer_name,payment_proof_url,payment_proof_uploaded_at,payments:payments(txid)`
         )
         .order("created_at", { ascending: false });
 
@@ -120,6 +128,52 @@ const AdminOrders = () => {
     return short ? `Client ${short}` : "Client";
   };
 
+  const updatePaymentStatus = async (orderId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({ payment_status: newStatus })
+        .eq("id", orderId);
+
+      if (error) throw error;
+
+      // Update local state
+      setRows(prevRows => 
+        prevRows.map(row => 
+          row.id === orderId 
+            ? { ...row, payment_status: newStatus }
+            : row
+        )
+      );
+
+      toast({
+        title: "Status Updated",
+        description: `Payment status updated to ${newStatus.charAt(0).toUpperCase() + newStatus.slice(1)}`
+      });
+    } catch (error: any) {
+      console.error("Failed to update payment status:", error);
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update payment status",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const getPaymentStatusBadge = (status: string, hasProof: boolean) => {
+    if (status === "paid") {
+      return <Badge variant="default" className="bg-green-500">Paid</Badge>;
+    } else if (status === "unpaid") {
+      return <Badge variant="destructive">Unpaid</Badge>;
+    } else if (status === "incomplete") {
+      return <Badge variant="secondary">Incomplete</Badge>;
+    } else if (status === "pending" && hasProof) {
+      return <Badge variant="outline" className="border-yellow-500 text-yellow-600">Pending Review</Badge>;
+    } else {
+      return <Badge variant="outline">Pending</Badge>;
+    }
+  };
+
   return (
     <div>
       <h2 className="text-xl font-semibold mb-4">Orders</h2>
@@ -131,6 +185,7 @@ const AdminOrders = () => {
               <th className="py-2 pr-4">Client Name</th>
               <th className="py-2 pr-4">Portions</th>
               <th className="py-2 pr-4">Location</th>
+              <th className="py-2 pr-4">Payment Proof</th>
               <th className="py-2 pr-4">Payment Status</th>
               <th className="py-2 pr-4">Order Status</th>
               <th className="py-2 pr-4">Time</th>
@@ -155,9 +210,52 @@ const AdminOrders = () => {
                 </td>
                 <td className="py-2 pr-4">{r.portions}</td>
                 <td className="py-2 pr-4">{r.location}</td>
-                <td className="py-2 pr-4">{r.payments?.[0]?.txid ? "Confirmed" : "Pending"}</td>
+                <td className="py-2 pr-4">
+                  <PaymentProofViewer
+                    paymentProofUrl={r.payment_proof_url}
+                    customerName={r.customer_name || getClientDisplayName(r)}
+                    orderId={r.id}
+                    trigger={
+                      r.payment_proof_url ? (
+                        <Button variant="ghost" size="sm" className="h-auto p-1 text-blue-600 hover:text-blue-800">
+                          View Proof
+                        </Button>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">No proof</span>
+                      )
+                    }
+                  />
+                </td>
+                <td className="py-2 pr-4">
+                  <div className="flex items-center gap-2">
+                    {getPaymentStatusBadge(r.payment_status, !!r.payment_proof_url)}
+                    <Select
+                      value={r.payment_status}
+                      onValueChange={(value) => updatePaymentStatus(r.id, value)}
+                    >
+                      <SelectTrigger className="w-32 h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="paid">Paid</SelectItem>
+                        <SelectItem value="unpaid">Unpaid</SelectItem>
+                        <SelectItem value="incomplete">Incomplete</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </td>
                 <td className="py-2 pr-4">{r.status || "pending"}</td>
-                <td className="py-2 pr-4">{new Date(r.created_at).toLocaleString()}</td>
+                <td className="py-2 pr-4">
+                  <div className="text-sm">
+                    <div>{new Date(r.created_at).toLocaleString()}</div>
+                    {r.payment_proof_uploaded_at && (
+                      <div className="text-xs text-muted-foreground">
+                        Proof: {new Date(r.payment_proof_uploaded_at).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
